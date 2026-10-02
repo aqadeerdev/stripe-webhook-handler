@@ -1,0 +1,982 @@
+{
+  "name": "Payment Handler Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "0b66e435-a8be-4ca0-91c2-71b002a3b6c8",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "8b40c5f9-dda4-48da-b303-2fa68af84436",
+      "name": "Webhook",
+      "webhookId": "0b66e435-a8be-4ca0-91c2-71b002a3b6c8"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nconst WEBHOOK_SECRET = $env.STRIPE_WEBHOOK_SECRET;\n\nconst item = $input.first();\nconst headers = item.json.headers;\n\nconst sigHeader = headers['stripe-signature'];\nif (!sigHeader) {\n  return [{ json: { valid: false, error: 'Missing Stripe-Signature header' } }];\n}\n\nconst binaryKeys = Object.keys(item.binary || {});\nif (binaryKeys.length === 0) {\n  return [{ json: { valid: false, error: 'No raw body binary data found — check Raw Body option on Webhook node' } }];\n}\nconst rawBodyBase64 = item.binary[binaryKeys[0]].data;\nconst rawBody = Buffer.from(rawBodyBase64, 'base64').toString('utf8');\n\n// Parse Stripe's header format\nconst parts = Object.fromEntries(\n  sigHeader.split(',').map(part => part.split('='))\n);\nconst timestamp = parts.t;\nconst receivedSig = parts.v1;\n\n// Reject old events to prevent replay attacks (5 minute tolerance)\nconst currentTime = Math.floor(Date.now() / 1000);\nconst isTooOld = Math.abs(currentTime - parseInt(timestamp)) > 300;\n\n// Recompute the signature ourselves\nconst signedPayload = `${timestamp}.${rawBody}`;\nconst expectedSig = crypto\n  .createHmac('sha256', WEBHOOK_SECRET)\n  .update(signedPayload, 'utf8')\n  .digest('hex');\n\n// Timing-safe comparison to avoid timing-attack side channels\nconst sigsMatch = receivedSig && expectedSig.length === receivedSig.length &&\n  crypto.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(receivedSig));\n\nif (!sigsMatch || isTooOld) {\n  return [{\n    json: {\n      valid: false,\n      error: isTooOld ? 'Timestamp too old (possible replay)' : 'Signature mismatch'\n    }\n  }];\n}\n\n// Signature confirmed - pass the actual event through\nconst event = JSON.parse(rawBody);\nreturn [{ json: { valid: true, event } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "b2777120-55b1-4d0d-8be3-6a797c5ab6d8",
+      "name": "Verify Signature"
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Verify Signature').first().json.event;\nconst eventType = event.type;\nconst paymentIntent = event.data.object;\n\nconst isSuccess = eventType === 'payment_intent.succeeded';\nconst isFailure = eventType === 'payment_intent.payment_failed';\n\nreturn [{\n  json: {\n    eventId: event.id,\n    eventType,\n    isSuccess,\n    isFailure,\n    amount: paymentIntent.amount / 100,\n    currency: paymentIntent.currency.toUpperCase(),\n    customerEmail: paymentIntent.receipt_email || $env.TEST_FALLBACK_EMAIL || null,\n    failureReason: isFailure ? paymentIntent.last_payment_error?.message : null,\n    createdAt: new Date(event.created * 1000).toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        -64
+      ],
+      "id": "6f0d550b-4c9e-436b-8095-0fde53792c45",
+      "name": "Parse Event"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7b41a911-c438-437b-aab5-c1e2e9b1ec6f",
+              "leftValue": "={{ $('Parse Event').item.json.isSuccess }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1360,
+        -64
+      ],
+      "id": "9c5a49d8-a8a7-42b1-8a38-65a06d9b2b2c",
+      "name": "If Success"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b6d603d4-ab2c-4cfc-8fbc-264e51b19757",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        0
+      ],
+      "id": "848ee677-0706-4f61-baa9-ecdca51a23c4",
+      "name": "If Valid"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9919bce4-b8b8-4f71-b722-4f95276d32aa",
+              "name": "retryCount",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "3b99bd64-9eea-4633-a6c5-9339c42016cc",
+              "name": "maxRetries",
+              "value": 3,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1600,
+        48
+      ],
+      "id": "26c31ff2-43e8-4475-9583-766b93e8c18c",
+      "name": "Init Retry State"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "253e0640-39a8-4858-92d8-d89e10b6e120",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2048,
+        48
+      ],
+      "id": "8cc1ce73-38cc-4984-be91-a954e39b712e",
+      "name": "If Email Sent"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ee20891e-396b-4273-81b8-f8cc62656afa",
+              "name": "retryCount",
+              "value": "={{ $json.retryCount + 1 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2272,
+        144
+      ],
+      "id": "7d4ed3d0-248b-4a33-a486-7b6a3a257499",
+      "name": "Update Retry Count"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e52e5242-fe2b-47ed-9962-a4daaaf19066",
+              "leftValue": "={{ $json.retryCount }}",
+              "rightValue": "={{ $json.maxRetries }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2496,
+        144
+      ],
+      "id": "c9acf0b5-02fa-4fea-9806-70ba2a150e9c",
+      "name": "If Max Retries"
+    },
+    {
+      "parameters": {
+        "amount": "={{ [60, 60, 60][$json.retryCount - 1] }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2720,
+        240
+      ],
+      "id": "200ee2ed-d740-4a6d-91d0-0ff16d6745d4",
+      "name": "Wait",
+      "webhookId": "e639b8bc-d908-428d-8026-3f1f8d818635"
+    },
+    {
+      "parameters": {
+        "fromEmail": "payments@company.com",
+        "toEmail": "={{ $('Parse Event').item.json.customerEmail }}",
+        "subject": "Your payment didn't go through - let's try again",
+        "html": "=Hi,\n\nWe tried to process a payment of {{ $('Parse Event').item.json.currency }} {{ $('Parse Event').item.json.amount }} but it didn't go through.\n\nReason: {{ $json.failureReason }}\n\nPlease try again using the link below, or reach out if you need help.\n\n[Retry payment link here]",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1824,
+        48
+      ],
+      "id": "84a32a06-0b23-48d4-aaf1-9aa27b6b8cc2",
+      "name": "Send Retry Email",
+      "webhookId": "4ebd945c-6b73-4e54-9c53-e840e995dab9",
+      "credentials": {
+        "smtp": {
+          "id": "mxu7TR6o8hEeMfk3",
+          "name": "SMTP account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0a924b18-36ce-4dad-8e3c-7f42253d1faa",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1136,
+        -64
+      ],
+      "id": "4241238f-a5a7-42aa-90f3-53ea3c6daf45",
+      "name": "If Record Does Not Exist"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appp3aUvSI540vXPs",
+          "mode": "list",
+          "cachedResultName": "Demo base",
+          "cachedResultUrl": "https://airtable.com/appp3aUvSI540vXPs"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblDwxi4Ew14mkke2",
+          "mode": "list",
+          "cachedResultName": "Payment Events",
+          "cachedResultUrl": "https://airtable.com/appp3aUvSI540vXPs/tblDwxi4Ew14mkke2"
+        },
+        "filterByFormula": "={Event ID} = '{{ $json.eventId }}'",
+        "returnAll": false,
+        "limit": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        912,
+        -64
+      ],
+      "id": "c4322f61-99d0-4980-b839-8309c25d092e",
+      "name": "Search Records",
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "VCHeUnWEge9IEQCX",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appp3aUvSI540vXPs",
+          "mode": "list",
+          "cachedResultName": "Demo base",
+          "cachedResultUrl": "https://airtable.com/appp3aUvSI540vXPs"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblDwxi4Ew14mkke2",
+          "mode": "list",
+          "cachedResultName": "Payment Events",
+          "cachedResultUrl": "https://airtable.com/appp3aUvSI540vXPs/tblDwxi4Ew14mkke2"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Event ID": "={{ $('Parse Event').item.json.eventId }}",
+            "Type": "success",
+            "Amount": "={{ $('Parse Event').item.json.amount }}",
+            "Currency": "={{ $('Parse Event').item.json.currency }}",
+            "Customer Email": "={{ $('Parse Event').item.json.customerEmail }}",
+            "Logged At": "={{ DateTime.now().toUTC() }}",
+            "Retry Count": "={{ 0 }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Event ID",
+              "displayName": "Event ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Type",
+              "displayName": "Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Amount",
+              "displayName": "Amount",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Currency",
+              "displayName": "Currency",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Customer Email",
+              "displayName": "Customer Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Failure Reason",
+              "displayName": "Failure Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Retry Count",
+              "displayName": "Retry Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Logged At",
+              "displayName": "Logged At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1584,
+        -160
+      ],
+      "id": "892dd921-922a-48d9-9a3e-be40208854a8",
+      "name": "Create Success Record",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "VCHeUnWEge9IEQCX",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appp3aUvSI540vXPs",
+          "mode": "list",
+          "cachedResultName": "Demo base",
+          "cachedResultUrl": "https://airtable.com/appp3aUvSI540vXPs"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblDwxi4Ew14mkke2",
+          "mode": "list",
+          "cachedResultName": "Payment Events",
+          "cachedResultUrl": "https://airtable.com/appp3aUvSI540vXPs/tblDwxi4Ew14mkke2"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Event ID": "={{ $('Parse Event').item.json.eventId }}",
+            "Type": "recovered",
+            "Amount": "={{ $('Parse Event').item.json.amount }}",
+            "Currency": "={{ $('Parse Event').item.json.currency }}",
+            "Customer Email": "={{ $('Parse Event').item.json.customerEmail }}",
+            "Failure Reason": "={{ $('Parse Event').item.json.failureReason }}",
+            "Retry Count": "={{ $('Init Retry State').item.json.retryCount }}",
+            "Logged At": "={{ DateTime.now().toUTC() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Event ID",
+              "displayName": "Event ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Type",
+              "displayName": "Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Amount",
+              "displayName": "Amount",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Currency",
+              "displayName": "Currency",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Customer Email",
+              "displayName": "Customer Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Failure Reason",
+              "displayName": "Failure Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Retry Count",
+              "displayName": "Retry Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Logged At",
+              "displayName": "Logged At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        2272,
+        -48
+      ],
+      "id": "c20eaddb-33f7-4777-a98b-81cb0ed63a08",
+      "name": "Create Recovered Record",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "VCHeUnWEge9IEQCX",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appp3aUvSI540vXPs",
+          "mode": "list",
+          "cachedResultName": "Demo base",
+          "cachedResultUrl": "https://airtable.com/appp3aUvSI540vXPs"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblDwxi4Ew14mkke2",
+          "mode": "list",
+          "cachedResultName": "Payment Events",
+          "cachedResultUrl": "https://airtable.com/appp3aUvSI540vXPs/tblDwxi4Ew14mkke2"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Event ID": "={{ $('Parse Event').item.json.eventId }}",
+            "Type": "exhausted",
+            "Amount": "={{ $('Parse Event').item.json.amount }}",
+            "Currency": "={{ $('Parse Event').item.json.currency}}",
+            "Customer Email": "={{ $('Parse Event').item.json.customerEmail }}",
+            "Failure Reason": "={{ $('Parse Event').item.json.failureReason }}",
+            "Retry Count": "={{ $('Update Retry Count').item.json.retryCount }}",
+            "Logged At": "={{ DateTime.now().toUTC() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Event ID",
+              "displayName": "Event ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Type",
+              "displayName": "Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Amount",
+              "displayName": "Amount",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Currency",
+              "displayName": "Currency",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Customer Email",
+              "displayName": "Customer Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Failure Reason",
+              "displayName": "Failure Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Retry Count",
+              "displayName": "Retry Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Logged At",
+              "displayName": "Logged At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        2720,
+        48
+      ],
+      "id": "20d67332-dac9-4674-8dab-57bd5204d6ea",
+      "name": "Create Exhausted Record",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "VCHeUnWEge9IEQCX",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        224
+      ],
+      "id": "040bed51-7a0f-4f8f-bc96-2a6c180525a5",
+      "name": "No Operation"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Signature": {
+      "main": [
+        [
+          {
+            "node": "If Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Event": {
+      "main": [
+        [
+          {
+            "node": "Search Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Valid": {
+      "main": [
+        [
+          {
+            "node": "Parse Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Success": {
+      "main": [
+        [
+          {
+            "node": "Create Success Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Init Retry State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Retry State": {
+      "main": [
+        [
+          {
+            "node": "Send Retry Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Email Sent": {
+      "main": [
+        [
+          {
+            "node": "Create Recovered Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Retry Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Retry Count": {
+      "main": [
+        [
+          {
+            "node": "If Max Retries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Max Retries": {
+      "main": [
+        [
+          {
+            "node": "Create Exhausted Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Retry Email": {
+      "main": [
+        [
+          {
+            "node": "If Email Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Email Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Send Retry Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Record Does Not Exist": {
+      "main": [
+        [
+          {
+            "node": "If Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Records": {
+      "main": [
+        [
+          {
+            "node": "If Record Does Not Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "803d5f4e-6928-462c-a7a9-d08404487fb2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fab56c544a556628ec92598be495d2fbabd06404d2473c2397b24a85271f9f20"
+  },
+  "nodeGroups": [],
+  "id": "LLxqYaVw2nnYtuLe",
+  "tags": []
+}
