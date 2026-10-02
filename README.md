@@ -33,9 +33,6 @@ Payment failures are inevitable, and without automation, a failed payment can ge
 ## Possible improvements
 - The recovery email includes a placeholder where the real "retry your payment" link would go. This was a deliberate choice as generating the new link would require a fresh Checkout Session with line-item/product data, something that is not provided in the PaymentIntent object received from the Webhook. A real link will look up the original Checkout Session or rely on an external order database.
 
-## Demo
-[Video walkthrough link]
-
 ## Possible extensions
 - Support additional Stripe event types (refunds, disputes).
 - Add a dead-letter queue pattern for events that fail signature verification completely to distinguish misconfiguration from active abuse.
