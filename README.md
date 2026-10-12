@@ -1,4 +1,4 @@
-# Payment Webhook Handler (Stripe)
+# Stripe Webhook Handler
 
 An n8n workflow that securely receives Stripe payment webhooks, verifies them, logs outcomes to a CRM, and automatically retries a customer recovery notification.
 
