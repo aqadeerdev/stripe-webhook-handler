@@ -1,6 +1,6 @@
 # Stripe Webhook Handler
 
-An n8n workflow that securely receives Stripe payment webhooks, verifies them, logs outcomes to a CRM, and automatically retries a customer recovery notification.
+An n8n workflow that securely receives Stripe payment webhooks, verifies them, logs outcomes to Airtable, and automatically sends a customer recovery email. A failure path is implemented that retries sending the email 3 times before notifying the team on Slack.
 
 ## The problem
 Payment failures are inevitable, and without automation, a failed payment can get silently lost if some does not manually notice and follow up. This workflow handles the full lifecycle by verifying whether the event is genuinely from Stripe, log it, and attempt recovery automatically.
@@ -17,7 +17,7 @@ Payment failures are inevitable, and without automation, a failed payment can ge
 
 ## Tools used
 - **n8n** (self-hosted via **Docker**) for workflow orchestration
-- **Stripe** (test mode) for payment event source and webhook signing
+- **Stripe Webhooks** (test mode) for payment event source and webhook signing
 - **JavaScript** (n8n Code node) for signature verification, event parsing, and retry state management
 - **Airtable** for event logging
 - **Slack API** for failure escalation alerts
@@ -31,7 +31,7 @@ Payment failures are inevitable, and without automation, a failed payment can ge
 5. Use the Stripe CLI to send test events: `stripe trigger payment_intent.succeeded` and `stripe trigger payment_intent.payment_failed`.
 
 ## Possible improvements
-- The recovery email includes a placeholder where the real "retry your payment" link would go. This was a deliberate choice as generating the new link would require a fresh Checkout Session with line-item/product data, something that is not provided in the PaymentIntent object received from the Webhook. A real link will look up the original Checkout Session or rely on an external order database.
+- The recovery email does not include a real "retry your payment" link. This was a deliberate choice as generating the new link would require a fresh Checkout Session with line-item/product data, something that is not provided in the PaymentIntent object received from the Webhook. A real link will look up the original Checkout Session or rely on an external order database.
 
 ## Possible extensions
 - Support additional Stripe event types (refunds, disputes).
