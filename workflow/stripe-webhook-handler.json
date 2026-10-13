@@ -1,5 +1,5 @@
 {
-  "name": "Payment Handler Workflow",
+  "name": "Stripe Webhook Handler",
   "nodes": [
     {
       "parameters": {
@@ -12,8 +12,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        0,
-        0
+        304,
+        -368
       ],
       "id": "8b40c5f9-dda4-48da-b303-2fa68af84436",
       "name": "Webhook",
@@ -26,8 +26,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        224,
-        0
+        480,
+        -368
       ],
       "id": "b2777120-55b1-4d0d-8be3-6a797c5ab6d8",
       "name": "Verify Signature"
@@ -39,8 +39,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        704,
-        -64
+        528,
+        -112
       ],
       "id": "6f0d550b-4c9e-436b-8095-0fde53792c45",
       "name": "Parse Event"
@@ -73,8 +73,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1360,
-        -64
+        1072,
+        -128
       ],
       "id": "9c5a49d8-a8a7-42b1-8a38-65a06d9b2b2c",
       "name": "If Success"
@@ -107,8 +107,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        448,
-        0
+        336,
+        -96
       ],
       "id": "848ee677-0706-4f61-baa9-ecdca51a23c4",
       "name": "If Valid"
@@ -137,8 +137,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        1600,
-        48
+        1248,
+        32
       ],
       "id": "26c31ff2-43e8-4475-9583-766b93e8c18c",
       "name": "Init Retry State"
@@ -172,8 +172,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        2048,
-        48
+        1680,
+        32
       ],
       "id": "8cc1ce73-38cc-4984-be91-a954e39b712e",
       "name": "If Email Sent"
@@ -196,7 +196,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        2272,
+        1904,
         144
       ],
       "id": "7d4ed3d0-248b-4a33-a486-7b6a3a257499",
@@ -229,7 +229,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        2496,
+        2096,
         144
       ],
       "id": "c9acf0b5-02fa-4fea-9806-70ba2a150e9c",
@@ -237,42 +237,17 @@
     },
     {
       "parameters": {
-        "amount": "={{ [60, 60, 60][$json.retryCount - 1] }}"
+        "amount": "={{ [60, 300, 900][$json.retryCount - 1] }}"
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        2720,
+        2288,
         240
       ],
       "id": "200ee2ed-d740-4a6d-91d0-0ff16d6745d4",
       "name": "Wait",
       "webhookId": "e639b8bc-d908-428d-8026-3f1f8d818635"
-    },
-    {
-      "parameters": {
-        "fromEmail": "payments@company.com",
-        "toEmail": "={{ $('Parse Event').item.json.customerEmail }}",
-        "subject": "Your payment didn't go through - let's try again",
-        "html": "=Hi,\n\nWe tried to process a payment of {{ $('Parse Event').item.json.currency }} {{ $('Parse Event').item.json.amount }} but it didn't go through.\n\nReason: {{ $json.failureReason }}\n\nPlease try again using the link below, or reach out if you need help.\n\n[Retry payment link here]",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
-      "position": [
-        1824,
-        48
-      ],
-      "id": "84a32a06-0b23-48d4-aaf1-9aa27b6b8cc2",
-      "name": "Send Retry Email",
-      "webhookId": "4ebd945c-6b73-4e54-9c53-e840e995dab9",
-      "credentials": {
-        "smtp": {
-          "id": "mxu7TR6o8hEeMfk3",
-          "name": "SMTP account"
-        }
-      },
-      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -303,8 +278,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1136,
-        -64
+        864,
+        -112
       ],
       "id": "4241238f-a5a7-42aa-90f3-53ea3c6daf45",
       "name": "If Record Does Not Exist"
@@ -334,8 +309,8 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.2,
       "position": [
-        912,
-        -64
+        688,
+        -112
       ],
       "id": "c4322f61-99d0-4980-b839-8309c25d092e",
       "name": "Search Records",
@@ -474,8 +449,8 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.2,
       "position": [
-        1584,
-        -160
+        1232,
+        -272
       ],
       "id": "892dd921-922a-48d9-9a3e-be40208854a8",
       "name": "Create Success Record",
@@ -614,8 +589,8 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.2,
       "position": [
-        2272,
-        -48
+        1888,
+        -80
       ],
       "id": "c20eaddb-33f7-4777-a98b-81cb0ed63a08",
       "name": "Create Recovered Record",
@@ -754,8 +729,8 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.2,
       "position": [
-        2720,
-        48
+        2288,
+        -16
       ],
       "id": "20d67332-dac9-4674-8dab-57bd5204d6ea",
       "name": "Create Exhausted Record",
@@ -771,11 +746,68 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        1344,
-        224
+        688,
+        304
       ],
       "id": "040bed51-7a0f-4f8f-bc96-2a6c180525a5",
       "name": "No Operation"
+    },
+    {
+      "parameters": {
+        "fromEmail": "company@mail.com",
+        "toEmail": "={{ $('Parse Event').item.json.customerEmail }}",
+        "subject": "Your payment didn't go through - let's try again",
+        "emailFormat": "text",
+        "text": "=Hi, We tried to process a payment of {{ $('Parse Event').item.json.currency }} {{ $('Parse Event').item.json.amount }} but it didn't go through. \n\nReason: {{ $('Parse Event').item.json.failureReason }} \n\nPlease try again using the link below, or reach out if you need help.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1440,
+        32
+      ],
+      "id": "84a32a06-0b23-48d4-aaf1-9aa27b6b8cc2",
+      "name": "Send Email",
+      "webhookId": "4ebd945c-6b73-4e54-9c53-e840e995dab9",
+      "credentials": {
+        "smtp": {
+          "id": "mxu7TR6o8hEeMfk3",
+          "name": "SMTP account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#demostripe",
+          "mode": "name"
+        },
+        "text": "=Max Retries Reached: {{ $json.fields['Retry Count'] }}\nAmount: {{ $json.fields.Currency }} {{ $json.fields.Amount }}\nCustomer: {{ $json.fields['Customer Email'] }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        2512,
+        -16
+      ],
+      "id": "584a8ff7-356b-4b64-b850-d4f32c5500ab",
+      "name": "Send Email Failure Alert",
+      "webhookId": "ea528b63-df6d-4bbe-841c-2f385a1553c0",
+      "credentials": {
+        "slackApi": {
+          "id": "fZzjitJGoEsodiuy",
+          "name": "Slack account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -853,7 +885,7 @@
       "main": [
         [
           {
-            "node": "Send Retry Email",
+            "node": "Send Email",
             "type": "main",
             "index": 0
           }
@@ -907,29 +939,11 @@
         ]
       ]
     },
-    "Send Retry Email": {
-      "main": [
-        [
-          {
-            "node": "If Email Sent",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "If Email Sent",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Wait": {
       "main": [
         [
           {
-            "node": "Send Retry Email",
+            "node": "Send Email",
             "type": "main",
             "index": 0
           }
@@ -964,6 +978,35 @@
           }
         ]
       ]
+    },
+    "Create Exhausted Record": {
+      "main": [
+        [
+          {
+            "node": "Send Email Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "If Email Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Email Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -971,7 +1014,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "803d5f4e-6928-462c-a7a9-d08404487fb2",
+  "versionId": "4bfe9d46-e032-421e-8663-ecd40d200d7f",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "fab56c544a556628ec92598be495d2fbabd06404d2473c2397b24a85271f9f20"
