@@ -17,7 +17,7 @@ Payment failures are inevitable, and without automation, a failed payment can ge
 
 ## Tools used
 - **n8n** (self-hosted via **Docker**) for workflow orchestration
-- **Stripe Webhooks** (test mode) for payment event source and webhook signing
+- **Stripe webhooks** (test mode) for payment event source and webhook signing
 - **JavaScript** (n8n Code node) for signature verification, event parsing, and retry state management
 - **Airtable** for event logging
 - **Slack API** for failure escalation alerts
